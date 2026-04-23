@@ -1,0 +1,237 @@
+.recommendation-panel {
+  background: linear-gradient(135deg, #f8fafc 0%, #f0f7ff 100%);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 15px 0;
+  box-shadow: 0 2px 8px rgba(57, 154, 255, 0.08);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.rec-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.recommendation-panel h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.rec-refresh-btn {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.rec-refresh-btn:hover {
+  border-color: #399aff;
+  background: #e8f3ff;
+}
+
+/* Recommendations List */
+.recommendations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recommendation-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  border-radius: 8px;
+  padding: 14px;
+  border-left: 4px solid #399aff;
+  transition: all 0.2s ease;
+}
+
+.recommendation-card:hover {
+  box-shadow: 0 4px 12px rgba(57, 154, 255, 0.15);
+  transform: translateX(4px);
+}
+
+.recommendation-card.rec-foundational {
+  border-left-color: #8b5cf6;
+}
+
+.recommendation-card.rec-reinforce {
+  border-left-color: #f59e0b;
+}
+
+.recommendation-card.rec-advance {
+  border-left-color: #10b981;
+}
+
+.recommendation-card.rec-new {
+  border-left-color: #3b82f6;
+}
+
+.rec-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rec-topic {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rec-emoji {
+  font-size: 18px;
+}
+
+.rec-text {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rec-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rec-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.rec-badge.rec-foundational {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.rec-badge.rec-reinforce {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.rec-badge.rec-advance {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.rec-badge.rec-new {
+  background: #dbeafe;
+  color: #0c4a6e;
+}
+
+.rec-difficulty {
+  color: #64748b;
+  font-size: 12px;
+}
+
+/* Priority Bar */
+.rec-priority-bar {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.rec-priority-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #399aff, #2196f3);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* Select Button */
+.rec-select-btn {
+  background: #399aff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  margin-left: 12px;
+}
+
+.rec-select-btn:hover {
+  background: #2196f3;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(57, 154, 255, 0.3);
+}
+
+.rec-select-btn:active {
+  transform: translateY(0);
+}
+
+/* Empty State */
+.no-recommendations {
+  text-align: center;
+  padding: 30px 20px;
+  color: #64748b;
+}
+
+.no-recommendations p {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.no-recommendations small {
+  display: block;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Loading & Error States */
+.rec-loading,
+.rec-error {
+  padding: 20px;
+  text-align: center;
+  border-radius: 8px;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.rec-loading {
+  background: #e8f3ff;
+  color: #0c4a6e;
+}
+
+.rec-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border-left: 4px solid #ef4444;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .recommendation-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .rec-select-btn {
+    margin-left: 0;
+    margin-top: 10px;
+    width: 100%;
+  }
+}
