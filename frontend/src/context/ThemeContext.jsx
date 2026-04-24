@@ -22,7 +22,11 @@ export function ThemeProvider({ children }) {
 
   const toggleTheme = () => {
     document.documentElement.classList.add('no-transitions');
-    requestAnimationFrame(() => document.documentElement.classList.remove('no-transitions'));
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document.documentElement.classList.remove('no-transitions');
+      });
+    });
     setIsDark(prev => !prev);
   };
 
