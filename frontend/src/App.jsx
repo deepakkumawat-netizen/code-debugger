@@ -437,6 +437,13 @@ export default function App() {
   const [limitExceeded, setLimitExceeded] = useState(false);
   const [limitMessage, setLimitMessage] = useState("");
 
+  // New features
+  const [runOutput, setRunOutput]         = useState(null);
+  const [runLoading, setRunLoading]       = useState(false);
+  const [shareMsg, setShareMsg]           = useState("");
+  const [simpleExp, setSimpleExp]         = useState("");
+  const [simpleLoading, setSimpleLoading] = useState(false);
+
   // Auto-clear error after 5 seconds
   useEffect(() => {
     if (!error) return;
@@ -613,6 +620,61 @@ export default function App() {
     finally { clearInterval(si); setLoading(false); setLoadingStep(0); }
   };
 
+  const handleRun = async () => {
+    const src = result ? result.debugged_code : code;
+    if (!src?.trim()) return;
+    setRunLoading(true); setRunOutput(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/run`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: src, language: result?.language || language }),
+      });
+      const data = await res.json();
+      setRunOutput(data);
+    } catch { setRunOutput({ output: "", error: "Could not reach server", exit_code: -1 }); }
+    finally { setRunLoading(false); }
+  };
+
+  const handleApplyFix = () => {
+    if (!result?.debugged_code) return;
+    setCode(result.debugged_code);
+    setResult(null); setRunOutput(null);
+  };
+
+  const handleShare = () => {
+    const src = code.trim();
+    if (!src) return;
+    const encoded = btoa(unescape(encodeURIComponent(src)));
+    const url = `${window.location.origin}${window.location.pathname}?code=${encoded}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setShareMsg("Link copied!");
+      setTimeout(() => setShareMsg(""), 2500);
+    });
+  };
+
+  const handleExplainSimple = async () => {
+    if (!result?.errors_found?.length) return;
+    setSimpleLoading(true); setSimpleExp("");
+    try {
+      const res = await fetch(`${API_BASE}/api/explain-simple`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ errors: result.errors_found, fixes: result.fixes_applied, language: result.language }),
+      });
+      const data = await res.json();
+      setSimpleExp(data.explanation || "");
+    } catch { setSimpleExp("Could not generate simple explanation."); }
+    finally { setSimpleLoading(false); }
+  };
+
+  // Load shared code from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const encoded = params.get("code");
+    if (encoded) {
+      try { setCode(decodeURIComponent(escape(atob(encoded)))); } catch { /* ignore bad param */ }
+    }
+  }, []);
+
   const errorCount = result?.errors_found?.length ?? 0;
   const hasErrors = errorCount > 0;
   const steps = ["Reading your code", "Scanning for bugs", "Applying fixes", "Validating output"];
@@ -743,9 +805,35 @@ export default function App() {
                   <button className="error-close" onClick={() => setError(null)}>✕</button>
                 </div>
               )}
-              <button type="button" className="debug-btn" onClick={handleDebug} disabled={loading}>
-                {loading ? <><span className="spinner"/> Analyzing your code...</> : "🔮 Fix My Code"}
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" className="debug-btn" onClick={handleDebug} disabled={loading} style={{ flex: 1 }}>
+                  {loading ? <><span className="spinner"/> Analyzing your code...</> : "🔮 Fix My Code"}
+                </button>
+                <button type="button" onClick={handleRun} disabled={runLoading || (!code.trim() && !result)}
+                  style={{ padding: "0 18px", background: "var(--fix)", color: "white", border: "none", borderRadius: 8,
+                    fontWeight: 700, fontSize: 14, cursor: "pointer", whiteSpace: "nowrap", opacity: (!code.trim() && !result) ? 0.5 : 1 }}>
+                  {runLoading ? "▶ Running…" : "▶ Run"}
+                </button>
+                <button type="button" onClick={handleShare} disabled={!code.trim()}
+                  style={{ padding: "0 14px", background: "var(--bg-2)", color: "var(--text)", border: "1.5px solid var(--border)", borderRadius: 8,
+                    fontWeight: 700, fontSize: 13, cursor: "pointer", opacity: !code.trim() ? 0.5 : 1 }}>
+                  {shareMsg || "🔗 Share"}
+                </button>
+              </div>
+              {runOutput && (
+                <div style={{ marginTop: 10, borderRadius: 8, overflow: "hidden", border: "1.5px solid var(--border)" }}>
+                  <div style={{ background: runOutput.exit_code === 0 ? "#064e3b" : "#7f1d1d",
+                    padding: "6px 12px", fontSize: 12, fontWeight: 700, color: "white", display: "flex", justifyContent: "space-between" }}>
+                    <span>{runOutput.exit_code === 0 ? "✅ Output" : "❌ Error"} — {runOutput.language || "Python"}</span>
+                    <button onClick={() => setRunOutput(null)} style={{ background: "none", border: "none", color: "white", cursor: "pointer", fontSize: 14 }}>✕</button>
+                  </div>
+                  <pre style={{ margin: 0, padding: "10px 14px", fontSize: 12.5, lineHeight: 1.6,
+                    background: "var(--bg-2)", color: "var(--text)", overflowX: "auto", maxHeight: 180, overflowY: "auto",
+                    whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                    {runOutput.output || runOutput.error || "(no output)"}
+                  </pre>
+                </div>
+              )}
             </div>
           </section>
 
@@ -836,7 +924,27 @@ export default function App() {
                       {hasErrors ? `🐛 ${errorCount} bug${errorCount !== 1 ? "s" : ""} fixed` : "✅ No bugs found"}
                     </div>
                     <div className="stat-pill stat-lang">💻 {result.language}</div>
+                    <button onClick={handleApplyFix}
+                      style={{ padding: "4px 12px", background: "var(--fix)", color: "white", border: "none",
+                        borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+                      ✏️ Apply Fix
+                    </button>
+                    {hasErrors && (
+                      <button onClick={handleExplainSimple} disabled={simpleLoading}
+                        style={{ padding: "4px 12px", background: "#7c3aed", color: "white", border: "none",
+                          borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+                        {simpleLoading ? "…" : "🧒 Explain Simply"}
+                      </button>
+                    )}
                   </div>
+                  {simpleExp && (
+                    <div style={{ background: "#f5f3ff", border: "1.5px solid #c4b5fd", borderRadius: 10,
+                      padding: "14px 16px", marginBottom: 12, fontSize: 13.5, lineHeight: 1.7, color: "#4c1d95" }}>
+                      <div style={{ fontWeight: 800, marginBottom: 6, fontSize: 13 }}>🧒 Simple Explanation</div>
+                      <button onClick={() => setSimpleExp("")} style={{ float: "right", background: "none", border: "none", cursor: "pointer", color: "#7c3aed", fontSize: 16 }}>✕</button>
+                      {simpleExp}
+                    </div>
+                  )}
 
                   {/* RICH SUMMARY */}
                   <div className="tutor-summary-box">

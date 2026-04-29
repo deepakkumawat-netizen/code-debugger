@@ -656,6 +656,74 @@ async def analyze_code_adaptive(request: AdaptiveAnalyzeCodeRequest):
         print(f"[ERROR] Failed to analyze code adaptively: {e}")
         return {"success": False, "error": str(e)}
 
+
+# ── Code Execution ────────────────────────────────────────────────────────────
+
+class RunRequest(BaseModel):
+    code: str
+    language: str = "Python"
+
+@app.post("/api/run")
+async def run_code(request: RunRequest):
+    if not request.code.strip():
+        raise HTTPException(status_code=400, detail="Code cannot be empty")
+    if request.language not in ("Python", "auto-detect"):
+        return {"output": "", "error": f"Live execution is only supported for Python on this server.\nFor {request.language}, download the fixed code and run it locally.", "language": request.language}
+    import subprocess, tempfile, sys
+    code = sanitize_code(request.code)
+    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False, encoding="utf-8") as f:
+        f.write(code)
+        tmp_path = f.name
+    try:
+        proc = subprocess.run(
+            [sys.executable, tmp_path],
+            capture_output=True, text=True, timeout=5,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+        )
+        return {
+            "output": proc.stdout[:5000],
+            "error":  proc.stderr[:2000],
+            "exit_code": proc.returncode,
+            "language": "Python"
+        }
+    except subprocess.TimeoutExpired:
+        return {"output": "", "error": "⏱ Execution timed out (5 second limit)", "exit_code": -1, "language": "Python"}
+    except Exception as e:
+        return {"output": "", "error": str(e), "exit_code": -1, "language": "Python"}
+    finally:
+        os.unlink(tmp_path)
+
+
+# ── Explain Simply ────────────────────────────────────────────────────────────
+
+class ExplainRequest(BaseModel):
+    errors: list[str]
+    fixes: list[str]
+    language: str = "Unknown"
+
+@app.post("/api/explain-simple")
+async def explain_simple(request: ExplainRequest):
+    if not request.errors:
+        raise HTTPException(status_code=400, detail="No errors to explain")
+    prompt = (
+        f"A student just had their {request.language} code debugged. "
+        f"Explain the following bugs and fixes in the simplest possible way, "
+        f"as if talking to a 10-year-old who is just learning to code. "
+        f"Use very simple words, fun analogies, and be encouraging.\n\n"
+        f"Bugs found:\n" + "\n".join(f"- {e}" for e in request.errors) + "\n\n"
+        f"Fixes applied:\n" + "\n".join(f"- {f}" for f in request.fixes) + "\n\n"
+        f"Give a short, friendly explanation (3-5 sentences max per bug). Use emojis."
+    )
+    try:
+        completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model=OPENAI_MODEL, temperature=0.7, max_tokens=512,
+        )
+        return {"explanation": completion.choices[0].message.content.strip()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ─── SERVE FRONTEND ────────────────────────────────────
 
 FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
