@@ -731,11 +731,13 @@ FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
 
+NO_CACHE_HEADERS = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+
 @app.get("/")
 def serve_index():
     index_file = FRONTEND_DIST / "index.html"
     if index_file.exists():
-        return FileResponse(index_file)
+        return FileResponse(index_file, headers=NO_CACHE_HEADERS)
     return {"message": "Frontend not built"}
 
 @app.get("/{full_path:path}", include_in_schema=False)
@@ -747,7 +749,7 @@ def serve_frontend(full_path: str):
         return FileResponse(file_path)
     index_file = FRONTEND_DIST / "index.html"
     if index_file.exists():
-        return FileResponse(index_file)
+        return FileResponse(index_file, headers=NO_CACHE_HEADERS)
     return {"error": "Not found"}
 
 if __name__ == "__main__":
