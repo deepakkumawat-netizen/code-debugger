@@ -22,9 +22,8 @@ from nlp_engine import nlp_engine
 from ml_models import ItemResponseTheory, BayesianKnowledgeTracing, DifficultyAdaptor, LearningPathRecommender
 from adaptive_integration import AdaptiveIntegration
 
-OLLAMA_BASE_URL  = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-OLLAMA_MODEL     = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-OPENAI_MODEL     = OLLAMA_MODEL
+OPENAI_API_KEY   = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL     = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 HOST             = os.getenv("HOST", "0.0.0.0")
 PORT             = int(os.getenv("PORT", "8000"))
 MAX_UPLOAD_MB    = int(os.getenv("MAX_UPLOAD_MB", "10"))
@@ -33,7 +32,7 @@ MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
 ALLOWED_ORIGINS = ["*"] if _raw_origins.strip() == "*" else [o.strip() for o in _raw_origins.split(",")]
 
-client = OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 app = FastAPI(title="Coding Assistant API", version="3.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
