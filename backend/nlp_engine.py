@@ -8,12 +8,16 @@ Features:
 """
 
 import json
+import os
 from openai import OpenAI
 
 class NLPEngine:
     def __init__(self):
-        self.client = OpenAI()
-        self.model = "gpt-4o-mini"
+        self.client = OpenAI(
+            api_key=os.getenv("GROQ_API_KEY", "").strip() or "missing-set-GROQ_API_KEY-in-env",
+            base_url="https://api.groq.com/openai/v1"
+        )
+        self.model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
     def analyze_question(self, question: str, context: str = "") -> dict:
         """
