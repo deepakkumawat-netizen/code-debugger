@@ -22,7 +22,7 @@ from nlp_engine import nlp_engine
 from ml_models import ItemResponseTheory, BayesianKnowledgeTracing, DifficultyAdaptor, LearningPathRecommender
 from adaptive_integration import AdaptiveIntegration
 
-OPENAI_API_KEY   = os.getenv("GROQ_API_KEY")
+OPENAI_API_KEY   = os.getenv("GROQ_API_KEY", "").strip() or "missing-set-GROQ_API_KEY-in-env"
 OPENAI_MODEL     = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 HOST             = os.getenv("HOST", "0.0.0.0")
 PORT             = int(os.getenv("PORT", "8000"))
