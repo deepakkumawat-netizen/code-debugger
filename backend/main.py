@@ -22,8 +22,8 @@ from nlp_engine import nlp_engine
 from ml_models import ItemResponseTheory, BayesianKnowledgeTracing, DifficultyAdaptor, LearningPathRecommender
 from adaptive_integration import AdaptiveIntegration
 
-OPENAI_API_KEY   = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL     = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_API_KEY   = os.getenv("GROQ_API_KEY")
+OPENAI_MODEL     = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 HOST             = os.getenv("HOST", "0.0.0.0")
 PORT             = int(os.getenv("PORT", "8000"))
 MAX_UPLOAD_MB    = int(os.getenv("MAX_UPLOAD_MB", "10"))
@@ -32,7 +32,7 @@ MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
 ALLOWED_ORIGINS = ["*"] if _raw_origins.strip() == "*" else [o.strip() for o in _raw_origins.split(",")]
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(api_key=OPENAI_API_KEY, base_url="https://api.groq.com/openai/v1")
 
 app = FastAPI(title="Coding Assistant API", version="3.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
