@@ -288,7 +288,7 @@ function SearchBar({ onResult, persistedResult, setPersistedResult, persistedQue
           <div className="search-result-groq-header">
             <span className="search-result-groq-icon">🤖</span>
             <span className="search-result-groq-title">AI Answer</span>
-            <span className="search-result-groq-badge">OpenAI · GPT-4o-mini</span>
+            <span className="search-result-groq-badge">Groq · Llama 3.3</span>
             <button className="search-result-close" onClick={() => setResult(null)} title="Close">✕</button>
           </div>
           {/* Scrollable body */}
@@ -322,7 +322,7 @@ function SearchBar({ onResult, persistedResult, setPersistedResult, persistedQue
 function FloatingChat() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
-    { role: "assistant", content: "👋 Hello! I am your CS Tutor powered by OpenAI. Ask me anything about coding, algorithms, programming languages, or computer science!" }
+    { role: "assistant", content: "👋 Hello! I am your CS Tutor powered by Groq. Ask me anything about coding, algorithms, programming languages, or computer science!" }
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -376,7 +376,7 @@ function FloatingChat() {
           <div className="chat-header">
             <div className="chat-header-info">
               <div className="chat-avatar">🧑‍🏫</div>
-              <div><div className="chat-header-name">CS Tutor</div><div className="chat-header-sub">⚡ Powered by OpenAI</div></div>
+              <div><div className="chat-header-name">CS Tutor</div><div className="chat-header-sub">⚡ Powered by Groq</div></div>
             </div>
             <button className="chat-close" onClick={() => setOpen(false)}>✕</button>
           </div>
@@ -696,7 +696,7 @@ export default function App() {
           </div>
           <div className="header-right">
             <div className="header-badge badge-free"><span className="badge-dot"/>Free &amp; Fast</div>
-            <div className="header-badge badge-model">⚡ GPT-4o-mini</div>
+            <div className="header-badge badge-model">⚡ Llama 3.3</div>
             <ThemeToggle />
             <button
               onClick={() => setShowHistory(!showHistory)}
@@ -898,7 +898,7 @@ export default function App() {
                   <div className="empty-hints">
                     <div className="hint-pill">🐛 Finds syntax errors</div>
                     <div className="hint-pill">🧠 Explains each fix clearly</div>
-                    <div className="hint-pill">⚡ Powered by OpenAI</div>
+                    <div className="hint-pill">⚡ Powered by Groq</div>
                   </div>
                 </div>
               )}
