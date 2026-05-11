@@ -660,6 +660,36 @@ class RunRequest(BaseModel):
     code: str
     language: str = "Python"
 
+def detect_language_from_code(code: str) -> str:
+    """Detect programming language from code content."""
+    s = code.strip()
+    # Go
+    if s.startswith("package ") or "func main()" in s or 'import "fmt"' in s:
+        return "Go"
+    # Java
+    if "public class " in s or "public static void main" in s or "System.out.println" in s:
+        return "Java"
+    # C++
+    if "#include" in s and ("cout" in s or "int main(" in s) and "::" in s:
+        return "C++"
+    # C
+    if ("#include <stdio.h>" in s or "#include<stdio.h>" in s or "printf(" in s) and "cout" not in s:
+        return "C"
+    # JavaScript / Node.js
+    if "console.log(" in s or ("require(" in s and "import" not in s):
+        return "JavaScript"
+    # TypeScript
+    if ": string" in s or ": number" in s or ": boolean" in s or "interface " in s:
+        return "TypeScript"
+    # Ruby
+    if s.startswith("def ") and "end" in s and "puts " in s:
+        return "Ruby"
+    # Rust
+    if "fn main()" in s and "println!" in s:
+        return "Rust"
+    # Python (broad fallback)
+    return "Python"
+
 @app.post("/api/run")
 async def run_code(request: RunRequest):
     import subprocess, tempfile, sys, shutil
@@ -667,8 +697,13 @@ async def run_code(request: RunRequest):
         raise HTTPException(status_code=400, detail="Code cannot be empty")
 
     code = sanitize_code(request.code)
-    lang = (request.language or "Python").strip()
+    lang = (request.language or "auto-detect").strip()
     lang_lower = lang.lower()
+
+    # Auto-detect from code content when language is not specified
+    if lang_lower in ("auto-detect", ""):
+        lang = detect_language_from_code(code)
+        lang_lower = lang.lower()
 
     # ── Python: actual execution ──────────────────────────────────────────────
     if lang_lower in ("python", "auto-detect", ""):
