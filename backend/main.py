@@ -662,33 +662,90 @@ class RunRequest(BaseModel):
 
 @app.post("/api/run")
 async def run_code(request: RunRequest):
+    import subprocess, tempfile, sys, shutil
     if not request.code.strip():
         raise HTTPException(status_code=400, detail="Code cannot be empty")
-    if request.language not in ("Python", "auto-detect"):
-        return {"output": "", "error": f"Live execution is only supported for Python on this server.\nFor {request.language}, download the fixed code and run it locally.", "language": request.language}
-    import subprocess, tempfile, sys
+
     code = sanitize_code(request.code)
-    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False, encoding="utf-8") as f:
-        f.write(code)
-        tmp_path = f.name
+    lang = (request.language or "Python").strip()
+    lang_lower = lang.lower()
+
+    # ── Python: actual execution ──────────────────────────────────────────────
+    if lang_lower in ("python", "auto-detect", ""):
+        with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False, encoding="utf-8") as f:
+            f.write(code); tmp_path = f.name
+        try:
+            proc = subprocess.run(
+                [sys.executable, tmp_path],
+                capture_output=True, text=True, timeout=5,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+            )
+            return {"output": proc.stdout[:5000], "error": proc.stderr[:2000], "exit_code": proc.returncode, "language": "Python"}
+        except subprocess.TimeoutExpired:
+            return {"output": "", "error": "⏱ Execution timed out (5 second limit)", "exit_code": -1, "language": "Python"}
+        except Exception as e:
+            return {"output": "", "error": str(e), "exit_code": -1, "language": "Python"}
+        finally:
+            try: os.unlink(tmp_path)
+            except: pass
+
+    # ── JavaScript / TypeScript: Node.js ────────────────────────────────────
+    if lang_lower in ("javascript", "javascript (react)", "typescript", "typescript (react)") and shutil.which("node"):
+        suffix = ".js"
+        run_code_str = code
+        # Strip TypeScript type annotations for plain Node execution
+        if "typescript" in lang_lower:
+            run_code_str = re.sub(r':\s*\w+(\[\])?', '', code)
+            run_code_str = re.sub(r'<\w+>', '', run_code_str)
+        with tempfile.NamedTemporaryFile(suffix=suffix, mode="w", delete=False, encoding="utf-8") as f:
+            f.write(run_code_str); tmp_path = f.name
+        try:
+            proc = subprocess.run(
+                ["node", tmp_path],
+                capture_output=True, text=True, timeout=5
+            )
+            return {"output": proc.stdout[:5000], "error": proc.stderr[:2000], "exit_code": proc.returncode, "language": lang}
+        except subprocess.TimeoutExpired:
+            return {"output": "", "error": "⏱ Execution timed out (5 second limit)", "exit_code": -1, "language": lang}
+        except Exception as e:
+            return {"output": "", "error": str(e), "exit_code": -1, "language": lang}
+        finally:
+            try: os.unlink(tmp_path)
+            except: pass
+
+    # ── Go: go run ───────────────────────────────────────────────────────────
+    if lang_lower == "go" and shutil.which("go"):
+        with tempfile.NamedTemporaryFile(suffix=".go", mode="w", delete=False, encoding="utf-8") as f:
+            f.write(code); tmp_path = f.name
+        try:
+            proc = subprocess.run(
+                ["go", "run", tmp_path],
+                capture_output=True, text=True, timeout=15
+            )
+            return {"output": proc.stdout[:5000], "error": proc.stderr[:2000], "exit_code": proc.returncode, "language": "Go"}
+        except subprocess.TimeoutExpired:
+            return {"output": "", "error": "⏱ Execution timed out", "exit_code": -1, "language": "Go"}
+        except Exception as e:
+            return {"output": "", "error": str(e), "exit_code": -1, "language": "Go"}
+        finally:
+            try: os.unlink(tmp_path)
+            except: pass
+
+    # ── All other languages: Groq AI simulation ──────────────────────────────
     try:
-        proc = subprocess.run(
-            [sys.executable, tmp_path],
-            capture_output=True, text=True, timeout=5,
-            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+        completion = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": f"You are a {lang} interpreter/compiler. The user will give you {lang} code. Execute it mentally and output ONLY what the program would print to stdout. If there is a runtime error, show the exact error message. No explanations, no markdown, no code fences — just the raw output."},
+                {"role": "user", "content": f"Run this {lang} code and show the output:\n\n{code}"}
+            ],
+            model=OPENAI_MODEL,
+            temperature=0,
+            max_tokens=512,
         )
-        return {
-            "output": proc.stdout[:5000],
-            "error":  proc.stderr[:2000],
-            "exit_code": proc.returncode,
-            "language": "Python"
-        }
-    except subprocess.TimeoutExpired:
-        return {"output": "", "error": "⏱ Execution timed out (5 second limit)", "exit_code": -1, "language": "Python"}
+        simulated = completion.choices[0].message.content.strip()
+        return {"output": f"[AI Simulated Output — {lang}]\n{simulated}", "error": "", "exit_code": 0, "language": lang, "simulated": True}
     except Exception as e:
-        return {"output": "", "error": str(e), "exit_code": -1, "language": "Python"}
-    finally:
-        os.unlink(tmp_path)
+        return {"output": "", "error": f"Could not simulate {lang} execution: {str(e)}", "exit_code": -1, "language": lang}
 
 
 # ── Explain Simply ────────────────────────────────────────────────────────────
