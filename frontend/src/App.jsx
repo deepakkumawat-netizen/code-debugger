@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import "./App.css";
 import DebugHistory from "./DebugHistory";
 import ThemeToggle from "./components/ThemeToggle";
+import Landing from "./Landing";
 
 const API_BASE = window.location.hostname === "localhost" ? "http://localhost:8004" : window.location.origin;
 
@@ -404,6 +405,7 @@ function FloatingChat() {
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
+  const [entered, setEntered] = useState(() => !!localStorage.getItem("codedebugger_user"));
   const [activeTab, setActiveTab] = useState("paste");
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState("auto-detect");
@@ -713,6 +715,10 @@ ${outputSection}
   const errorCount = result?.errors_found?.length ?? 0;
   const hasErrors = errorCount > 0;
   const steps = ["Reading your code", "Scanning for bugs", "Applying fixes", "Validating output"];
+
+  if (!entered) {
+    return <Landing onEnter={() => setEntered(true)} />;
+  }
 
   return (
     <div className="app">
