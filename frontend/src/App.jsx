@@ -435,6 +435,48 @@ function FloatingChat() {
   );
 }
 
+// ── Detect whether pasted content is actually source code ───────────────────
+// Used to block "Fix My Code" when the user pastes a bare URL, an article,
+// PDF text or any other non-code blob.
+function looksLikeCode(text) {
+  const t = (text || '').trim();
+  if (!t) return false;
+
+  // Bare URL — most common "this isn't code" input.
+  if (/^https?:\/\/\S+\/?$/i.test(t) || /^www\.\S+$/i.test(t)) return false;
+  // A few words with no code-like characters.
+  if (t.length < 12 && !/[{};()=<>[\]]/.test(t)) return false;
+
+  const lines = t.split('\n');
+  const nonEmpty = lines.filter(l => l.trim());
+
+  const codeKeywords = /\b(function|def|class|if|else|elif|for|while|return|var|let|const|import|from|public|private|protected|static|void|int|float|double|char|string|bool|boolean|true|false|null|None|True|False|print|println|printf|console\.log|System\.out|require|module|export|async|await|yield|throw|try|catch|finally|switch|case|break|continue|#include|using|namespace|struct|enum|interface|implements|extends|new|delete|this|self|super|lambda|with|as|in|is|not|and|or)\b/;
+  const operators   = /(==|!=|<=|>=|=>|->|::|\+\+|--|&&|\|\||<<|>>|\+=|-=|\*=|\/=)/;
+  const assignment  = /^\s*[A-Za-z_$][\w$.]*\s*=\s*\S/m;
+  const fnCall      = /[A-Za-z_$][\w$]*\s*\([^)]*\)/;
+  const braceLine   = /^\s*[{}]\s*$/m;
+  const semicolons  = (t.match(/;/g) || []).length;
+  const indented    = nonEmpty.some(l => /^( {2,}|\t)/.test(l));
+  const codeChars   = /[{};()\[\]<>=]/;
+  const comment     = /(^|\n)\s*(\/\/|#|\/\*|<!--)/;
+
+  let score = 0;
+  if (codeKeywords.test(t)) score += 2;
+  if (operators.test(t))    score += 1;
+  if (assignment.test(t))   score += 1;
+  if (fnCall.test(t))       score += 1;
+  if (braceLine.test(t))    score += 2;
+  if (semicolons >= 2)      score += 1;
+  if (indented)             score += 1;
+  if (comment.test(t))      score += 1;
+  if (codeChars.test(t))    score += 1;
+  // Prose penalty: many sentences ending with a period and no code chars.
+  const sentences = (t.match(/\.\s+[A-Z]/g) || []).length;
+  if (sentences >= 3 && !codeChars.test(t)) score -= 3;
+
+  return score >= 3;
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [entered, setEntered] = useState(() => !!localStorage.getItem("codedebugger_user"));
@@ -445,6 +487,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [disclaimer, setDisclaimer] = useState(null);
   const [viewMode, setViewMode] = useState("learn");
   const [rightTab, setRightTab] = useState("preview");
   // ── Lifted search state — persists across tab switches ──────────────────────
@@ -484,6 +527,13 @@ export default function App() {
     const timer = setTimeout(() => setError(null), 5000);
     return () => clearTimeout(timer);
   }, [error]);
+
+  // Auto-dismiss the "not code" disclaimer popup after 3 seconds
+  useEffect(() => {
+    if (!disclaimer) return;
+    const timer = setTimeout(() => setDisclaimer(null), 3000);
+    return () => clearTimeout(timer);
+  }, [disclaimer]);
 
   // Load initial usage count
   useEffect(() => {
@@ -592,6 +642,12 @@ export default function App() {
 
       if (activeTab === "paste") {
         if (!code.trim()) { setError("Please paste your code first."); setLoading(false); clearInterval(si); return; }
+        if (!looksLikeCode(code)) {
+          setDisclaimer("This tool only debugs source code. URLs, plain text, PDFs and other non-code content can't be analyzed — please paste real code.");
+          setLoading(false);
+          clearInterval(si);
+          return;
+        }
         const res = await fetch(`${API_BASE}/api/debug`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, language }) });
         if (!res.ok) { const d = await res.json(); throw new Error(d.detail || "Server error"); }
         const result = await res.json();
@@ -657,6 +713,10 @@ export default function App() {
   const handleRun = async () => {
     const src = result ? result.debugged_code : code;
     if (!src?.trim()) return;
+    if (!result && !looksLikeCode(src)) {
+      setDisclaimer("This tool runs source code only. URLs, plain text, PDFs and other non-code content can't be executed.");
+      return;
+    }
     setRunLoading(true); setRunOutput(null);
     try {
       const res = await fetch(`${API_BASE}/api/run`, {
@@ -754,6 +814,47 @@ ${outputSection}
 
   return (
     <div className="app">
+      {disclaimer && (
+        <div
+          onClick={() => setDisclaimer(null)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "rgba(2, 6, 23, 0.55)",
+            display: "flex", alignItems: "flex-start", justifyContent: "center",
+            paddingTop: "10vh", animation: "fadeIn .15s ease",
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: "var(--surface)", color: "var(--text)",
+              border: "2px solid #ef4444", borderRadius: 14,
+              padding: "22px 26px", maxWidth: 460, width: "calc(100% - 32px)",
+              boxShadow: "0 24px 80px rgba(0,0,0,0.4)",
+              animation: "fadeUp .2s ease",
+              position: "relative",
+            }}
+          >
+            <div style={{ fontSize: 40, marginBottom: 10, textAlign: "center" }}>🚫</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#ef4444", marginBottom: 8, textAlign: "center", letterSpacing: "-0.2px" }}>
+              Not Code
+            </div>
+            <div style={{ fontSize: 14, lineHeight: 1.6, color: "var(--text-2)", textAlign: "center" }}>
+              {disclaimer}
+            </div>
+            <div style={{
+              position: "absolute", bottom: 0, left: 0, height: 3,
+              background: "#ef4444", borderRadius: "0 0 12px 12px",
+              animation: "shrinkBar 3s linear forwards",
+            }} />
+            <style>{`
+              @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+              @keyframes fadeUp { from{opacity:0;transform:translateY(-12px)} to{opacity:1;transform:translateY(0)} }
+              @keyframes shrinkBar { from{width:100%} to{width:0%} }
+            `}</style>
+          </div>
+        </div>
+      )}
       <header className="header">
         <div className="header-inner">
           <div className="logo">
