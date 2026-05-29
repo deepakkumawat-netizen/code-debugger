@@ -104,17 +104,28 @@ export default function Landing({ onEnter }) {
         </div>
       </header>
 
-      <section style={{ textAlign: "center", padding: "64px 6vw 40px", maxWidth: 860, margin: "0 auto" }}>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 100, background: "var(--blue-dim)", color: "var(--blue)", fontWeight: 700, fontSize: 13, marginBottom: 22 }}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--blue)" }} /> AI Debugger · Explainer · CS Tutor
+      <section style={{ padding: "64px 6vw 40px", maxWidth: 1100, margin: "0 auto", display: "flex", alignItems: "center", gap: 40, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 380px", minWidth: 280 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 100, background: "var(--blue-dim)", color: "var(--blue)", fontWeight: 700, fontSize: 13, marginBottom: 22 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--blue)" }} /> AI Debugger · Explainer · CS Tutor
+          </div>
+          <h1 style={{ fontSize: "clamp(34px, 5vw, 54px)", fontWeight: 800, lineHeight: 1.1, margin: "0 0 18px" }}>Find bugs &amp; learn code<br /><span style={{ color: "var(--blue)" }}>in seconds.</span></h1>
+          <p style={{ fontSize: "clamp(15px, 2vw, 18px)", color: "var(--text-2)", maxWidth: 520, margin: "0 0 30px", lineHeight: 1.6 }}>
+            Paste your code to instantly find and fix bugs, get plain-English explanations, optimize it, and chat with a CS tutor — all in one place.
+          </p>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+            <button onClick={() => setAuth("signup")} style={{ padding: "14px 30px", borderRadius: 12, border: "none", background: "var(--blue)", color: "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer", boxShadow: "var(--shadow-blue)" }}>Get Started Free →</button>
+            <button onClick={onEnter} style={{ padding: "14px 30px", borderRadius: 12, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontWeight: 700, fontSize: 16, cursor: "pointer" }}>Try it now</button>
+          </div>
         </div>
-        <h1 style={{ fontSize: "clamp(34px, 5vw, 54px)", fontWeight: 800, lineHeight: 1.1, margin: "0 0 18px" }}>Find bugs &amp; learn code<br /><span style={{ color: "var(--blue)" }}>in seconds.</span></h1>
-        <p style={{ fontSize: "clamp(15px, 2vw, 18px)", color: "var(--text-2)", maxWidth: 600, margin: "0 auto 30px", lineHeight: 1.6 }}>
-          Paste your code to instantly find and fix bugs, get plain-English explanations, optimize it, and chat with a CS tutor — all in one place.
-        </p>
-        <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-          <button onClick={() => setAuth("signup")} style={{ padding: "14px 30px", borderRadius: 12, border: "none", background: "var(--blue)", color: "#fff", fontWeight: 700, fontSize: 16, cursor: "pointer", boxShadow: "var(--shadow-blue)" }}>Get Started Free →</button>
-          <button onClick={onEnter} style={{ padding: "14px 30px", borderRadius: 12, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontWeight: 700, fontSize: 16, cursor: "pointer" }}>Try it now</button>
+        <div style={{ flex: "1 1 320px", minWidth: 260, display: "flex", justifyContent: "center" }}>
+          <img
+            src="https://image.pollinations.ai/prompt/3D%20Pixar%20cartoon%20illustration%20of%20a%20laptop%20with%20code%20on%20the%20screen%2C%20cute%20cartoon%20bugs%20being%20fixed%20with%20a%20magnifying%20glass%2C%20checkmarks%20and%20sparkles%2C%20bright%20vibrant%20colors%2C%20clean%20white%20background%2C%20developer%20debugging?width=768&height=768&seed=44&nologo=true"
+            alt="Debugging code with AI"
+            loading="lazy"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            style={{ width: "100%", maxWidth: 420, height: "auto", borderRadius: 20, boxShadow: "var(--shadow-md)" }}
+          />
         </div>
       </section>
 

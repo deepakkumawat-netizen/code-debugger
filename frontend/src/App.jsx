@@ -4,6 +4,38 @@ import DebugHistory from "./DebugHistory";
 import ThemeToggle from "./components/ThemeToggle";
 import Landing from "./Landing";
 
+function ProfileMenu() {
+  const [open, setOpen] = useState(false);
+  const user = (() => { try { return JSON.parse(localStorage.getItem('codedebugger_user') || '{}'); } catch { return {}; } })();
+  const initial = (user.name || user.email || 'U').charAt(0).toUpperCase();
+  const signOut = () => {
+    localStorage.removeItem('codedebugger_user');
+    localStorage.removeItem('codedebugger_seen_landing');
+    window.location.reload();
+  };
+  return (
+    <div style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)} title={user.name || 'Profile'}
+        style={{ width: 36, height: 36, borderRadius: '50%', border: '2px solid var(--border)', background: 'var(--blue)', color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+        {initial}
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 998 }} />
+          <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, minWidth: 220, background: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: 12, boxShadow: 'var(--shadow-md)', zIndex: 999, padding: 14 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>{user.name || 'User'}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 12, wordBreak: 'break-all' }}>{user.email || ''}</div>
+            <button onClick={signOut}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1.5px solid #ef4444', background: 'transparent', color: '#ef4444', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              Sign Out
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 const API_BASE = window.location.hostname === "localhost" ? "http://localhost:8004" : window.location.origin;
 
 const LANGUAGES = [
@@ -765,6 +797,7 @@ ${outputSection}
             }}>
               {usageCount}/50
             </div>
+            <ProfileMenu />
           </div>
         </div>
       </header>
