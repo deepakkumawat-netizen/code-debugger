@@ -11,6 +11,7 @@ function ProfileMenu() {
   const signOut = () => {
     localStorage.removeItem('codedebugger_user');
     localStorage.removeItem('codedebugger_seen_landing');
+    localStorage.removeItem('codedebugger_session_id');
     window.location.reload();
   };
   return (
@@ -477,9 +478,32 @@ function looksLikeCode(text) {
   return score >= 3;
 }
 
+// Generate (or read) the active login session id. Session = "one login";
+// stored in localStorage so a reload while still entered keeps the same id,
+// but signOut clears it and the next login mints a new one.
+function getOrCreateSessionId() {
+  let s = localStorage.getItem('codedebugger_session_id');
+  if (!s) {
+    s = 'sess_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem('codedebugger_session_id', s);
+  }
+  return s;
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [entered, setEntered] = useState(() => !!localStorage.getItem("codedebugger_user"));
+  // In-memory only — every fresh page load shows the landing first.
+  const [entered, setEntered] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
+
+  // Mint / refresh the session id as soon as the user enters the tool.
+  // We deliberately rotate it on each entry so a fresh page load = new session.
+  const enterTool = () => {
+    const newId = 'sess_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem('codedebugger_session_id', newId);
+    setSessionId(newId);
+    setEntered(true);
+  };
   const [activeTab, setActiveTab] = useState("paste");
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState("auto-detect");
@@ -666,6 +690,7 @@ export default function App() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             user_id: userId,
+            session_id: sessionId,
             code,
             language: result.language,
             errors_found: result.errors_found,
@@ -696,6 +721,7 @@ export default function App() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             user_id: userId,
+            session_id: sessionId,
             code,
             language: result.language,
             errors_found: result.errors_found,
@@ -809,7 +835,7 @@ ${outputSection}
   const steps = ["Reading your code", "Scanning for bugs", "Applying fixes", "Validating output"];
 
   if (!entered) {
-    return <Landing onEnter={() => setEntered(true)} />;
+    return <Landing onEnter={enterTool} />;
   }
 
   return (

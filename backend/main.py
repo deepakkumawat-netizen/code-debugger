@@ -83,8 +83,16 @@ class SaveDebugRequest(BaseModel):
     errors_found: list[str]
     fixes_applied: list[str]
     explanation: str
+    session_id: str | None = None
 
 class DebugHistoryRequest(BaseModel):
+    user_id: str
+    date_from: str | None = None
+    date_to: str | None = None
+    session_id: str | None = None
+    limit: int = 100
+
+class SessionListRequest(BaseModel):
     user_id: str
 
 class UsageCheckRequest(BaseModel):
@@ -411,7 +419,7 @@ async def get_languages():
 
 @app.post("/api/save-debug")
 async def save_debug(request: SaveDebugRequest):
-    """Save debug session to history"""
+    """Save debug session to history (tagged with the login session_id)"""
     try:
         debug_id = db.save_debug(
             request.user_id,
@@ -419,31 +427,44 @@ async def save_debug(request: SaveDebugRequest):
             request.language,
             request.errors_found,
             request.fixes_applied,
-            request.explanation
+            request.explanation,
+            session_id=request.session_id,
         )
-        return {
-            "success": True,
-            "debug_id": debug_id,
-            "message": "Debug saved to history"
-        }
+        return {"success": True, "debug_id": debug_id, "message": "Debug saved to history"}
     except Exception as e:
         print(f"[ERROR] Failed to save debug: {e}")
         return {"success": False, "error": str(e)}
 
 @app.post("/api/debug-history")
 async def get_debug_history(request: DebugHistoryRequest):
-    """Get last 7 debug sessions for a user"""
+    """Get debug history with optional date / session filters"""
     try:
-        debugs = db.get_last_7_debugs(request.user_id)
+        debugs = db.get_history(
+            request.user_id,
+            date_from=request.date_from,
+            date_to=request.date_to,
+            session_id=request.session_id,
+            limit=request.limit,
+        )
         return {
             "user_id": request.user_id,
             "debugs": debugs,
             "count": len(debugs),
-            "success": True
+            "success": True,
         }
     except Exception as e:
         print(f"[ERROR] Failed to get debug history: {e}")
         return {"success": False, "error": str(e)}
+
+@app.post("/api/debug-sessions")
+async def list_debug_sessions(request: SessionListRequest):
+    """List the user's distinct login sessions for the session-filter dropdown."""
+    try:
+        sessions = db.list_sessions(request.user_id)
+        return {"user_id": request.user_id, "sessions": sessions, "success": True}
+    except Exception as e:
+        print(f"[ERROR] Failed to list debug sessions: {e}")
+        return {"success": False, "error": str(e), "sessions": []}
 
 @app.post("/api/check-usage")
 async def check_usage(request: UsageCheckRequest):

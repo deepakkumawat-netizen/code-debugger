@@ -1,216 +1,372 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 const API_BASE = window.location.hostname === "localhost" ? "http://localhost:8004" : window.location.origin;
 
+const todayIso = () => new Date().toISOString().slice(0, 10);
+const daysAgoIso = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+
+const formatDateTime = (s) => {
+  if (!s) return '';
+  const d = new Date(s.includes('Z') || s.includes('T') ? s : s.replace(' ', 'T') + 'Z');
+  if (isNaN(d.getTime())) return s;
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+const sessionLabel = (sess, idx) => {
+  if (!sess) return `Session ${idx + 1}`;
+  const ts = sess.first_at ? formatDateTime(sess.first_at) : '';
+  return ts ? `${ts} · ${sess.count} item${sess.count === 1 ? '' : 's'}` : `Session ${idx + 1}`;
+};
+
+// ─── DEBUG VIEWER (Word-like modal for a single history entry) ─────────────────
+function DebugViewer({ debug, onClose }) {
+  if (!debug) return null;
+
+  const renderText = () => {
+    const lines = [];
+    lines.push(`Language: ${debug.language || 'unknown'}`);
+    lines.push(`Saved: ${formatDateTime(debug.created_at)}`);
+    if (debug.session_id) lines.push(`Session: ${debug.session_id}`);
+    lines.push('');
+    lines.push('=== ORIGINAL CODE ===');
+    lines.push(debug.code || '');
+    lines.push('');
+    if (debug.errors && debug.errors.length) {
+      lines.push('=== ERRORS FOUND ===');
+      debug.errors.forEach((e, i) => lines.push(`${i + 1}. ${e}`));
+      lines.push('');
+    }
+    if (debug.fixes && debug.fixes.length) {
+      lines.push('=== FIXES APPLIED ===');
+      debug.fixes.forEach((f, i) => lines.push(`${i + 1}. ${f}`));
+      lines.push('');
+    }
+    if (debug.explanation) {
+      lines.push('=== EXPLANATION ===');
+      lines.push(debug.explanation);
+    }
+    return lines.join('\n');
+  };
+
+  const text = renderText();
+
+  const downloadTxt = () => {
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `debug-${debug.id || Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadPdf = () => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    script.onload = () => {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const margin = 15;
+      const maxW = pageW - margin * 2;
+      let y = margin;
+      text.split('\n').forEach(line => {
+        if (y > pageH - margin) { doc.addPage(); y = margin; }
+        const t = line;
+        if (!t.trim()) { y += 4; return; }
+        const isHeading = /^={3,}.*={3,}$/.test(t.trim());
+        doc.setFont(isHeading ? 'helvetica' : 'courier', isHeading ? 'bold' : 'normal');
+        doc.setFontSize(isHeading ? 11 : 9.5);
+        doc.setTextColor(11, 27, 45);
+        const wrapped = doc.splitTextToSize(t, maxW);
+        if (y + wrapped.length * 5 > pageH - margin) { doc.addPage(); y = margin; }
+        doc.text(wrapped, margin, y);
+        y += wrapped.length * 5 + 1.5;
+      });
+      doc.save(`debug-${debug.id || Date.now()}.pdf`);
+    };
+    document.head.appendChild(script);
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1500,
+        background: 'rgba(2, 6, 23, 0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: 'min(820px, 100%)', height: 'min(86vh, 820px)',
+          background: 'var(--surface)', color: 'var(--text)',
+          borderRadius: 14, boxShadow: '0 24px 80px rgba(0,0,0,0.4)',
+          border: '1.5px solid var(--border)',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        }}
+      >
+        <div style={{
+          padding: '12px 16px',
+          background: 'linear-gradient(135deg, var(--blue) 0%, var(--blue-hover) 100%)',
+          color: 'white', display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>🐛 Debug · {debug.language || 'unknown'}</div>
+            <div style={{ fontSize: 11, opacity: 0.9 }}>{formatDateTime(debug.created_at)}</div>
+          </div>
+          <button onClick={downloadPdf} title="Download as PDF"
+            style={{ background: 'white', color: '#dc2626', border: 'none', borderRadius: 8,
+              padding: '6px 12px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>⬇ PDF</button>
+          <button onClick={downloadTxt} title="Download as TXT"
+            style={{ background: 'rgba(255,255,255,0.95)', color: '#16a34a', border: 'none', borderRadius: 8,
+              padding: '6px 10px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>TXT</button>
+          <button onClick={onClose} title="Close"
+            style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white',
+              width: 30, height: 30, borderRadius: 8, cursor: 'pointer', fontSize: 16 }}>✕</button>
+        </div>
+
+        <pre style={{
+          flex: 1, margin: 0, padding: '20px 24px', overflow: 'auto',
+          fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+          fontSize: 13, lineHeight: 1.6,
+          background: 'var(--bg)', color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+        }}>{text}</pre>
+      </div>
+    </div>
+  );
+}
+
+// ─── DEBUG HISTORY POPUP ──────────────────────────────────────────────────────
 const DebugHistory = ({ userId, isOpen, onClose, apiUrl = API_BASE }) => {
   const [debugs, setDebugs] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const fetchDebugHistory = async () => {
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [sessionId, setSessionId] = useState('');
+  const [activeDebug, setActiveDebug] = useState(null);
+
+  const fetchSessions = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/api/debug-sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(data.sessions || []);
+      }
+    } catch (_) { /* ignored */ }
+  };
+
+  const fetchHistory = async () => {
     try {
       setLoading(true);
       setError(null);
-      console.log('[DebugHistory] Fetching for user:', userId);
-
-      const response = await fetch(`${apiUrl}/api/debug-history`, {
+      const res = await fetch(`${apiUrl}/api/debug-history`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId })
+        body: JSON.stringify({
+          user_id: userId,
+          date_from: dateFrom || null,
+          date_to: dateTo || null,
+          session_id: sessionId || null,
+          limit: 100,
+        }),
       });
-
-      console.log('[DebugHistory] Response status:', response.status);
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('[DebugHistory] Fetched data:', data);
+      if (res.ok) {
+        const data = await res.json();
         setDebugs(data.debugs || []);
       } else {
-        const errorText = await response.text();
-        console.error('[DebugHistory] API error:', response.status, errorText);
-        setError(`Failed to load debug history (${response.status})`);
+        setError(`Failed to load history (${res.status})`);
       }
-    } catch (error) {
-      console.error('[DebugHistory] Error fetching debug history:', error);
-      setError(`Connection error: ${error.message}`);
+    } catch (e) {
+      setError(`Connection error: ${e.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isOpen) {
-      fetchDebugHistory();
-    }
+    if (!isOpen) return;
+    fetchSessions();
+    fetchHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, userId]);
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
+  // Refetch when a filter changes (while the popup is open)
+  useEffect(() => {
+    if (!isOpen) return;
+    fetchHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFrom, dateTo, sessionId]);
 
-    if (diffMins < 1) {
-      return 'just now';
-    } else if (diffMins < 60) {
-      return `${diffMins}m ago`;
-    } else if (diffHours < 24) {
-      return `${diffHours}h ago`;
-    } else if (diffDays === 1) {
-      return 'Yesterday';
-    } else if (diffDays < 7) {
-      return `${diffDays}d ago`;
-    } else {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    }
+  const sessionOptions = useMemo(() => sessions.map((s, i) => ({
+    value: s.session_id,
+    label: sessionLabel(s, i),
+  })), [sessions]);
+
+  const setPreset = (preset) => {
+    const today = todayIso();
+    if (preset === 'today')     { setDateFrom(today);             setDateTo(today); }
+    else if (preset === 'week') { setDateFrom(daysAgoIso(7));     setDateTo(today); }
+    else if (preset === 'month'){ setDateFrom(daysAgoIso(30));    setDateTo(today); }
+    else                        { setDateFrom('');                setDateTo('');    }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div style={{
-      position: 'fixed',
-      right: 0,
-      top: 0,
-      width: 320,
-      height: '100vh',
-      background: 'var(--surface)',
-      borderLeft: '1px solid var(--border)',
-      boxShadow: '-2px 0 8px rgba(0, 0, 0, 0.1)',
-      transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
-      transition: 'transform 0.3s ease-in-out, background 0.3s ease',
-      zIndex: 999,
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden'
-    }}>
-      {/* Header */}
-      <div style={{
-        padding: '16px',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        background: 'linear-gradient(135deg, var(--blue) 0%, var(--blue-hover) 100%)',
-        color: 'white',
-        transition: 'background 0.3s ease'
-      }}>
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>📋 Debug History</h3>
-        <button
-          onClick={onClose}
+    <>
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 1100,
+          background: 'rgba(2, 6, 23, 0.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+        }}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
           style={{
-            background: 'none',
-            border: 'none',
-            color: 'white',
-            fontSize: 20,
-            cursor: 'pointer',
-            padding: 0,
-            width: 28,
-            height: 28,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 6,
-            transition: 'background-color 0.2s'
+            width: 'min(720px, 100%)', height: 'min(86vh, 760px)',
+            background: 'var(--surface)', color: 'var(--text)',
+            borderRadius: 14, boxShadow: '0 24px 80px rgba(0,0,0,0.4)',
+            border: '1.5px solid var(--border)',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
           }}
-          onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.2)'}
-          onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
         >
-          ✕
-        </button>
+          {/* Header */}
+          <div style={{
+            padding: '14px 18px',
+            background: 'linear-gradient(135deg, var(--blue) 0%, var(--blue-hover) 100%)',
+            color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>📋 Debug History</div>
+              <div style={{ fontSize: 11, opacity: 0.9 }}>
+                {loading ? 'Loading…' : `${debugs.length} item${debugs.length === 1 ? '' : 's'}`}
+                {' · '}user {userId.slice(0, 12)}…
+              </div>
+            </div>
+            <button onClick={onClose} title="Close"
+              style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white',
+                width: 32, height: 32, borderRadius: 8, cursor: 'pointer', fontSize: 18 }}>✕</button>
+          </div>
+
+          {/* Filter bar */}
+          <div style={{
+            padding: '12px 16px', borderBottom: '1.5px solid var(--border)',
+            background: 'var(--surface-2, var(--bg))',
+            display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
+          }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => setPreset('today')} style={presetBtn}>Today</button>
+              <button onClick={() => setPreset('week')}  style={presetBtn}>7d</button>
+              <button onClick={() => setPreset('month')} style={presetBtn}>30d</button>
+              <button onClick={() => setPreset('all')}   style={presetBtn}>All</button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                title="From" style={dateInput} />
+              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>→</span>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                title="To" style={dateInput} />
+            </div>
+            <select value={sessionId} onChange={e => setSessionId(e.target.value)}
+              style={{ ...dateInput, minWidth: 160 }} title="Filter by login session">
+              <option value="">All sessions</option>
+              {sessionOptions.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            {(dateFrom || dateTo || sessionId) && (
+              <button onClick={() => { setDateFrom(''); setDateTo(''); setSessionId(''); }}
+                style={{ ...presetBtn, color: '#ef4444', borderColor: '#fecaca' }}>Clear</button>
+            )}
+          </div>
+
+          {/* List */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+            {error && (
+              <div style={{ padding: 12, background: '#ef444418', border: '1px solid #ef444455',
+                color: '#ef4444', borderRadius: 8, fontSize: 13, marginBottom: 10 }}>
+                ⚠️ {error}
+              </div>
+            )}
+            {loading ? (
+              <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}>
+                Loading history…
+              </div>
+            ) : debugs.length === 0 ? (
+              <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}>
+                <p style={{ fontSize: 14, fontWeight: 600 }}>No debugs match your filters.</p>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
+                  Run "Fix My Code" — saved debugs will appear here.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {debugs.map((d, i) => (
+                  <div key={d.id || i}
+                    onClick={() => setActiveDebug(d)}
+                    style={{
+                      display: 'flex', gap: 12, padding: 12, borderRadius: 10,
+                      background: 'var(--surface-2, var(--bg))', cursor: 'pointer',
+                      border: '1px solid var(--border)', transition: 'all 0.18s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--blue)';
+                      e.currentTarget.style.transform = 'translateX(2px)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.transform = 'translateX(0)'; }}
+                  >
+                    <div style={{ fontSize: 22, flexShrink: 0 }}>🐛</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
+                        {d.language || 'unknown'}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-3)',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        fontFamily: '"JetBrains Mono", monospace', marginTop: 2 }}>
+                        {d.preview || 'No code preview'}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+                        {formatDateTime(d.created_at)}
+                        {d.errors?.length ? ` · ${d.errors.length} error${d.errors.length === 1 ? '' : 's'}` : ''}
+                      </div>
+                    </div>
+                    <div style={{ alignSelf: 'center', fontSize: 11, color: 'var(--blue)',
+                      whiteSpace: 'nowrap', fontWeight: 700 }}>Open →</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Content */}
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        padding: '8px'
-      }}>
-        {error && (
-          <div style={{ padding: 12, background: 'var(--error-bg)', borderRadius: 8, margin: 8, color: 'var(--error)', fontSize: 12, transition: 'background 0.3s ease, color 0.3s ease' }}>
-            ⚠️ {error}
-          </div>
-        )}
-        {loading ? (
-          <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)', transition: 'color 0.3s ease' }}>
-            Loading history...
-          </div>
-        ) : debugs.length === 0 ? (
-          <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)', transition: 'color 0.3s ease' }}>
-            <p>No debug history yet.</p>
-            <p style={{ fontSize: 12, color: 'var(--border-strong)', marginTop: 8, transition: 'color 0.3s ease' }}>
-              Start debugging and your last 7 debugs will appear here!
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {debugs.map((debug, i) => (
-              <div
-                key={debug.id || i}
-                style={{
-                  display: 'flex',
-                  gap: 12,
-                  padding: 12,
-                  borderRadius: 10,
-                  background: 'var(--surface-2)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  border: '1px solid var(--border)',
-                  userSelect: 'none'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.background = 'var(--blue-light)';
-                  e.currentTarget.style.borderColor = 'var(--blue)';
-                  e.currentTarget.style.transform = 'translateX(-4px)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(57, 154, 255, 0.2)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = 'var(--surface-2)';
-                  e.currentTarget.style.borderColor = 'var(--border)';
-                  e.currentTarget.style.transform = 'translateX(0)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                <div style={{ fontSize: 20, flexShrink: 0 }}>🐛</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontWeight: 600,
-                    color: 'var(--text)',
-                    fontSize: 14,
-                    transition: 'color 0.3s ease',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    marginBottom: 4
-                  }}>
-                    {debug.language}
-                  </div>
-                  <div style={{
-                    fontSize: 12,
-                    color: 'var(--text-3)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    marginBottom: 4,
-                    transition: 'color 0.3s ease'
-                  }}>
-                    {debug.preview || 'No preview'}
-                  </div>
-                  <div style={{
-                    fontSize: 11,
-                    color: 'var(--border-strong)',
-                    transition: 'color 0.3s ease'
-                  }}>
-                    {formatDate(debug.created_at)}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+      {activeDebug && <DebugViewer debug={activeDebug} onClose={() => setActiveDebug(null)} />}
+    </>
   );
+};
+
+const presetBtn = {
+  padding: '5px 10px', fontSize: 12, fontWeight: 600,
+  background: 'var(--bg)', color: 'var(--text)',
+  border: '1px solid var(--border)', borderRadius: 6,
+  cursor: 'pointer',
+};
+const dateInput = {
+  padding: '5px 8px', fontSize: 12,
+  background: 'var(--bg)', color: 'var(--text)',
+  border: '1px solid var(--border)', borderRadius: 6,
+  fontFamily: 'inherit',
 };
 
 export default DebugHistory;

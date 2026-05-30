@@ -28,6 +28,7 @@ class DebuggerDatabase:
             CREATE TABLE IF NOT EXISTS debug_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id TEXT NOT NULL,
+                session_id TEXT,
                 code TEXT,
                 language TEXT,
                 errors_found TEXT,
@@ -36,6 +37,13 @@ class DebuggerDatabase:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Migration: backfill session_id column on older DBs that pre-date it.
+        try:
+            cols = [r[1] for r in c.execute("PRAGMA table_info(debug_history)").fetchall()]
+            if 'session_id' not in cols:
+                c.execute("ALTER TABLE debug_history ADD COLUMN session_id TEXT")
+        except Exception as _e:
+            print(f"[DB] session_id migration warning: {_e}")
 
         # Usage tracking table
         c.execute('''
@@ -105,55 +113,101 @@ class DebuggerDatabase:
         print("[DB] Code Debugger database initialized with adaptive learning tables")
 
     def save_debug(self, user_id: str, code: str, language: str,
-                   errors_found: list, fixes_applied: list, explanation: str) -> int:
-        """Save debug session to history"""
+                   errors_found: list, fixes_applied: list, explanation: str,
+                   session_id: str = None) -> int:
+        """Save debug session to history (tagged with the login session_id)"""
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
 
         c.execute('''
-            INSERT INTO debug_history (user_id, code, language, errors_found, fixes_applied, explanation)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (user_id, code, language, json.dumps(errors_found), json.dumps(fixes_applied), explanation))
+            INSERT INTO debug_history (user_id, session_id, code, language, errors_found, fixes_applied, explanation)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, session_id, code, language, json.dumps(errors_found), json.dumps(fixes_applied), explanation))
 
         debug_id = c.lastrowid
         conn.commit()
         conn.close()
 
-        # Cleanup old debugs (keep only last 7)
-        self.cleanup_old_debugs(user_id)
+        # Keep the last 100 entries per user so the date/session filter is useful.
+        self.cleanup_old_debugs(user_id, keep_count=100)
 
         return debug_id
 
-    def get_last_7_debugs(self, user_id: str) -> list:
-        """Get last 7 debug sessions for a user"""
+    def get_history(self, user_id: str, date_from: str = None, date_to: str = None,
+                    session_id: str = None, limit: int = 100) -> list:
+        """Get history entries for a user with optional date / session filtering.
+
+        Args:
+            user_id:    required
+            date_from:  ISO date 'YYYY-MM-DD' (inclusive lower bound on created_at)
+            date_to:    ISO date 'YYYY-MM-DD' (inclusive upper bound)
+            session_id: only entries from this login session
+            limit:      max rows
+        """
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
 
-        c.execute('''
-            SELECT id, code, language, errors_found, fixes_applied, explanation, created_at
-            FROM debug_history
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-            LIMIT 7
-        ''', (user_id,))
+        sql = '''SELECT id, session_id, code, language, errors_found, fixes_applied,
+                        explanation, created_at
+                 FROM debug_history WHERE user_id = ?'''
+        params = [user_id]
+        if date_from:
+            sql += ' AND date(created_at) >= date(?)'
+            params.append(date_from)
+        if date_to:
+            sql += ' AND date(created_at) <= date(?)'
+            params.append(date_to)
+        if session_id:
+            sql += ' AND session_id = ?'
+            params.append(session_id)
+        sql += ' ORDER BY created_at DESC LIMIT ?'
+        params.append(int(limit))
 
+        c.execute(sql, params)
         rows = c.fetchall()
         conn.close()
 
-        debugs = []
+        out = []
         for row in rows:
-            debugs.append({
+            code = row[2] or ''
+            out.append({
                 'id': row[0],
-                'code': row[1],
-                'language': row[2],
-                'errors': json.loads(row[3]) if row[3] else [],
-                'fixes': json.loads(row[4]) if row[4] else [],
-                'explanation': row[5],
-                'created_at': row[6],
-                'preview': (row[1][:50] + '...') if row[1] and len(row[1]) > 50 else (row[1] or '')
+                'session_id': row[1],
+                'code': code,
+                'language': row[3],
+                'errors': json.loads(row[4]) if row[4] else [],
+                'fixes': json.loads(row[5]) if row[5] else [],
+                'explanation': row[6],
+                'created_at': row[7],
+                'preview': (code[:80] + '...') if len(code) > 80 else code,
             })
+        return out
 
-        return debugs
+    # Back-compat for older callers.
+    def get_last_7_debugs(self, user_id: str) -> list:
+        return self.get_history(user_id, limit=7)
+
+    def list_sessions(self, user_id: str) -> list:
+        """List distinct login sessions for a user, newest first, with counts."""
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute('''
+            SELECT session_id,
+                   COUNT(*) as n,
+                   MIN(created_at) as first_ts,
+                   MAX(created_at) as last_ts
+            FROM debug_history
+            WHERE user_id = ? AND session_id IS NOT NULL AND session_id != ''
+            GROUP BY session_id
+            ORDER BY last_ts DESC
+            LIMIT 50
+        ''', (user_id,))
+        rows = c.fetchall()
+        conn.close()
+        return [
+            {'session_id': r[0], 'count': r[1], 'first_at': r[2], 'last_at': r[3]}
+            for r in rows
+        ]
 
     def cleanup_old_debugs(self, user_id: str, keep_count: int = 7) -> int:
         """Delete debugs older than the last N per user"""
