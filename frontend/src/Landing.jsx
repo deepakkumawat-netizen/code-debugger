@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTheme } from "./context/ThemeContext";
 
 const FEATURES = [
@@ -86,9 +86,21 @@ function AuthModal({ mode, onClose, onSwitch, onEnter }) {
   );
 }
 
+// Rotates the Pollinations seed every 5s so the hero image refreshes to a
+// new generation. Same prompt, different seed → fresh variation each time.
+function useRotatingSeed(startSeed = 44, intervalMs = 5000) {
+  const [seed, setSeed] = useState(startSeed)
+  useEffect(() => {
+    const t = setInterval(() => setSeed(s => s + 1), intervalMs)
+    return () => clearInterval(t)
+  }, [intervalMs])
+  return seed
+}
+
 export default function Landing({ onEnter }) {
   const { isDark, toggleTheme } = useTheme();
   const [auth, setAuth] = useState(null);
+  const heroSeed = useRotatingSeed(44);
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)", fontFamily: "var(--sans)" }}>
@@ -120,11 +132,12 @@ export default function Landing({ onEnter }) {
         </div>
         <div style={{ flex: "1 1 320px", minWidth: 260, display: "flex", justifyContent: "center" }}>
           <img
-            src="https://image.pollinations.ai/prompt/3D%20Pixar%20cartoon%20illustration%20of%20a%20laptop%20with%20code%20on%20the%20screen%2C%20cute%20cartoon%20bugs%20being%20fixed%20with%20a%20magnifying%20glass%2C%20checkmarks%20and%20sparkles%2C%20bright%20vibrant%20colors%2C%20clean%20white%20background%2C%20developer%20debugging?width=768&height=768&seed=44&nologo=true"
+            src={`https://image.pollinations.ai/prompt/3D%20Pixar%20cartoon%20illustration%20of%20a%20laptop%20with%20code%20on%20the%20screen%2C%20cute%20cartoon%20bugs%20being%20fixed%20with%20a%20magnifying%20glass%2C%20checkmarks%20and%20sparkles%2C%20bright%20vibrant%20colors%2C%20clean%20white%20background%2C%20developer%20debugging?width=768&height=768&seed=${heroSeed}&nologo=true`}
             alt="Debugging code with AI"
             loading="lazy"
             onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            style={{ width: "100%", maxWidth: 420, height: "auto", borderRadius: 20, boxShadow: "var(--shadow-md)" }}
+            style={{ width: "100%", maxWidth: 420, height: "auto", borderRadius: 20, boxShadow: "var(--shadow-md)", transition: "opacity 0.4s" }}
+            key={heroSeed}
           />
         </div>
       </section>
