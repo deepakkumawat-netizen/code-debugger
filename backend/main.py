@@ -686,33 +686,70 @@ class RunRequest(BaseModel):
     language: str = "Python"
 
 def detect_language_from_code(code: str) -> str:
-    """Detect programming language from code content."""
+    """Detect programming language from code content.
+
+    Order matters: strong, unambiguous signals (Java's System.out, C++'s
+    std::/cout, C's printf) are checked before weak ones. The `int main()`
+    signature alone is a strong C/C++ indicator and must be caught BEFORE
+    the Python fallback — otherwise the executor writes the file to .py
+    and the Python interpreter blows up on "int main()" with a syntax
+    error (the exact bug from the screenshot).
+    """
     s = code.strip()
+
+    # Java — System.out / public class / static void main(String[] args)
+    if "System.out.println" in s or "public class " in s or "public static void main" in s:
+        return "Java"
+
+    # C++ — any iostream / std namespace marker is unambiguous
+    if any(t in s for t in ("std::", "cout <<", "cin >>", "#include <iostream>",
+                            "using namespace std", "<<endl", "<< endl", "->",
+                            "template<", "template <")):
+        return "C++"
+
+    # C — stdio includes or printf/scanf calls
+    if any(t in s for t in ("#include <stdio.h>", "#include<stdio.h>",
+                            "printf(", "scanf(", "fprintf(", "fputs(")):
+        return "C"
+
+    # C / C++ via the int|void main(…) signature — covers the common case
+    # where a student just types `int main() { … }` with no #include.
+    # Pick C++ if there are any C++-ish hints, otherwise C.
+    if re.search(r"\b(int|void)\s+main\s*\(", s):
+        if any(t in s for t in ("cout", "cin", "::", "new ", "delete ", "class ", "//")):
+            return "C++"
+        return "C"
+
     # Go
     if s.startswith("package ") or "func main()" in s or 'import "fmt"' in s:
         return "Go"
-    # Java
-    if "public class " in s or "public static void main" in s or "System.out.println" in s:
-        return "Java"
-    # C++
-    if "#include" in s and ("cout" in s or "int main(" in s) and "::" in s:
-        return "C++"
-    # C
-    if ("#include <stdio.h>" in s or "#include<stdio.h>" in s or "printf(" in s) and "cout" not in s:
-        return "C"
-    # JavaScript / Node.js
-    if "console.log(" in s or ("require(" in s and "import" not in s):
-        return "JavaScript"
-    # TypeScript
-    if ": string" in s or ": number" in s or ": boolean" in s or "interface " in s:
-        return "TypeScript"
-    # Ruby
-    if s.startswith("def ") and "end" in s and "puts " in s:
-        return "Ruby"
+
     # Rust
     if "fn main()" in s and "println!" in s:
         return "Rust"
-    # Python (broad fallback)
+
+    # JavaScript / Node.js
+    if "console.log(" in s or ("require(" in s and "import" not in s):
+        return "JavaScript"
+
+    # TypeScript
+    if ": string" in s or ": number" in s or ": boolean" in s or "interface " in s:
+        return "TypeScript"
+
+    # Ruby
+    if s.startswith("def ") and "end" in s and "puts " in s:
+        return "Ruby"
+
+    # Python — require a positive signal so we don't dump C/C++/Java into
+    # the Python interpreter as a "broad fallback" and produce confusing
+    # SyntaxError messages.
+    if any(t in s for t in ("print(", "def ", "import ", "from ", "if __name__",
+                            "elif ", " in range(", "lambda ", "self.")):
+        return "Python"
+
+    # Truly ambiguous — default to Python but the executor will see this
+    # via lang_lower and the AI-simulation path will handle it as best it
+    # can rather than feeding it to the Python interpreter.
     return "Python"
 
 @app.post("/api/run")
