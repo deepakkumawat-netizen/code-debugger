@@ -86,21 +86,32 @@ function AuthModal({ mode, onClose, onSwitch, onEnter }) {
   );
 }
 
-// Rotates the Pollinations seed every 5s so the hero image refreshes to a
-// new generation. Same prompt, different seed → fresh variation each time.
-function useRotatingSeed(startSeed = 44, intervalMs = 5000) {
-  const [seed, setSeed] = useState(startSeed)
+// Rotates the hero image — preloads the next Pollinations seed in the
+// background and only swaps the visible URL once it's fully loaded, so
+// the user never sees a blank rectangle between rotations.
+function usePreloadedRotatingUrl(buildUrl, startSeed = 44, intervalMs = 5000) {
+  const [url, setUrl] = useState(() => buildUrl(startSeed))
   useEffect(() => {
-    const t = setInterval(() => setSeed(s => s + 1), intervalMs)
+    let seed = startSeed
+    const t = setInterval(() => {
+      seed += 1
+      const nextUrl = buildUrl(seed)
+      const img = new Image()
+      img.onload = () => setUrl(nextUrl)
+      img.src = nextUrl
+    }, intervalMs)
     return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intervalMs])
-  return seed
+  return url
 }
+
+const HERO_URL = (s) => `https://image.pollinations.ai/prompt/3D%20Pixar%20cartoon%20illustration%20of%20a%20laptop%20with%20code%20on%20the%20screen%2C%20cute%20cartoon%20bugs%20being%20fixed%20with%20a%20magnifying%20glass%2C%20checkmarks%20and%20sparkles%2C%20bright%20vibrant%20colors%2C%20clean%20white%20background%2C%20developer%20debugging?width=768&height=768&seed=${s}&nologo=true`
 
 export default function Landing({ onEnter }) {
   const { isDark, toggleTheme } = useTheme();
   const [auth, setAuth] = useState(null);
-  const heroSeed = useRotatingSeed(44);
+  const heroUrl = usePreloadedRotatingUrl(HERO_URL, 44);
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)", fontFamily: "var(--sans)" }}>
@@ -132,12 +143,10 @@ export default function Landing({ onEnter }) {
         </div>
         <div style={{ flex: "1 1 320px", minWidth: 260, display: "flex", justifyContent: "center" }}>
           <img
-            src={`https://image.pollinations.ai/prompt/3D%20Pixar%20cartoon%20illustration%20of%20a%20laptop%20with%20code%20on%20the%20screen%2C%20cute%20cartoon%20bugs%20being%20fixed%20with%20a%20magnifying%20glass%2C%20checkmarks%20and%20sparkles%2C%20bright%20vibrant%20colors%2C%20clean%20white%20background%2C%20developer%20debugging?width=768&height=768&seed=${heroSeed}&nologo=true`}
+            src={heroUrl}
             alt="Debugging code with AI"
-            loading="lazy"
             onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            style={{ width: "100%", maxWidth: 420, height: "auto", borderRadius: 20, boxShadow: "var(--shadow-md)", transition: "opacity 0.4s" }}
-            key={heroSeed}
+            style={{ width: "100%", maxWidth: 420, height: "auto", aspectRatio: "1 / 1", borderRadius: 20, boxShadow: "var(--shadow-md)", transition: "opacity 0.4s", background: "linear-gradient(135deg, var(--blue-dim, #e3f0ff), #f7fbff)" }}
           />
         </div>
       </section>
