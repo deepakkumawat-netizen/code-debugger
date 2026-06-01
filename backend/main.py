@@ -932,6 +932,56 @@ async def run_code(request: RunRequest):
             try: os.unlink(tmp_path)
             except: pass
 
+    # ── Shell / Bash: bash file.sh ───────────────────────────────────────────
+    if lang_lower in ("shell/bash", "bash", "shell", "sh") and shutil.which("bash"):
+        with tempfile.NamedTemporaryFile(suffix=".sh", mode="w", delete=False, encoding="utf-8") as f:
+            f.write(code); tmp_path = f.name
+        try:
+            proc = subprocess.run(["bash", tmp_path], capture_output=True, text=True, timeout=10)
+            return {"output": proc.stdout[:5000], "error": proc.stderr[:2000], "exit_code": proc.returncode, "language": "Shell/Bash"}
+        except subprocess.TimeoutExpired:
+            return {"output": "", "error": "⏱ Execution timed out", "exit_code": -1, "language": "Shell/Bash"}
+        except Exception as e:
+            return {"output": "", "error": str(e), "exit_code": -1, "language": "Shell/Bash"}
+        finally:
+            try: os.unlink(tmp_path)
+            except: pass
+
+    # ── R: Rscript file.R ────────────────────────────────────────────────────
+    if lang_lower == "r" and shutil.which("Rscript"):
+        with tempfile.NamedTemporaryFile(suffix=".R", mode="w", delete=False, encoding="utf-8") as f:
+            f.write(code); tmp_path = f.name
+        try:
+            proc = subprocess.run(["Rscript", "--vanilla", tmp_path], capture_output=True, text=True, timeout=15)
+            return {"output": proc.stdout[:5000], "error": proc.stderr[:2000], "exit_code": proc.returncode, "language": "R"}
+        except subprocess.TimeoutExpired:
+            return {"output": "", "error": "⏱ Execution timed out", "exit_code": -1, "language": "R"}
+        except Exception as e:
+            return {"output": "", "error": str(e), "exit_code": -1, "language": "R"}
+        finally:
+            try: os.unlink(tmp_path)
+            except: pass
+
+    # ── SQL: in-memory sqlite3 ───────────────────────────────────────────────
+    # Each Run is executed against a fresh :memory: database so prior runs
+    # don't leak state. Multi-statement scripts work via the -echo flag.
+    if lang_lower == "sql" and shutil.which("sqlite3"):
+        with tempfile.NamedTemporaryFile(suffix=".sql", mode="w", delete=False, encoding="utf-8") as f:
+            f.write(code); tmp_path = f.name
+        try:
+            proc = subprocess.run(
+                ["sqlite3", ":memory:", f".read {tmp_path}"],
+                capture_output=True, text=True, timeout=10
+            )
+            return {"output": proc.stdout[:5000], "error": proc.stderr[:2000], "exit_code": proc.returncode, "language": "SQL"}
+        except subprocess.TimeoutExpired:
+            return {"output": "", "error": "⏱ Execution timed out", "exit_code": -1, "language": "SQL"}
+        except Exception as e:
+            return {"output": "", "error": str(e), "exit_code": -1, "language": "SQL"}
+        finally:
+            try: os.unlink(tmp_path)
+            except: pass
+
     # ── Any language still unhandled: AI-simulated output via Claude/Groq ────
     try:
         completion = chat_with_fallback(

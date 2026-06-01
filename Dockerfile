@@ -20,6 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         rustc \
         ruby \
         php-cli \
+        bash \
+        r-base-core \
+        sqlite3 \
         curl ca-certificates gnupg \
  && curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
  && apt-get install -y --no-install-recommends nodejs \
