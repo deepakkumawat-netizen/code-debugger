@@ -34,6 +34,10 @@ ALLOWED_ORIGINS = ["*"] if _raw_origins.strip() == "*" else [o.strip() for o in 
 
 client = OpenAI(api_key=OPENAI_API_KEY, base_url="https://api.groq.com/openai/v1")
 
+# Multi-provider chat helper: Groq 70B → Groq 8B → Groq Gemma → Claude Haiku.
+# Use for all non-streaming calls so a single quota hit doesn't kill the tool.
+from llm_client import chat_with_fallback
+
 app = FastAPI(title="Coding Assistant API", version="3.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
@@ -290,7 +294,7 @@ async def debug_code(request: DebugRequest):
     clean_code = sanitize_code(request.code)
     prompt = build_debug_prompt(clean_code, request.language or "auto-detect")
     try:
-        completion = client.chat.completions.create(
+        completion = chat_with_fallback(
             messages=[
                 {"role": "system", "content": "You are a helpful coding assistant for students. Always respond with valid JSON only. Never use markdown or code fences. Never include control characters in JSON strings."},
                 {"role": "user", "content": prompt},
@@ -330,7 +334,7 @@ async def chat(request: ChatRequest):
             }
         ] + [{"role": m.role, "content": m.content} for m in request.messages]
 
-        completion = client.chat.completions.create(
+        completion = chat_with_fallback(
             messages=messages,
             model=OPENAI_MODEL,
             temperature=0.5,
@@ -368,7 +372,7 @@ Rules:
 - example_code should be null if no code example is needed
 - Keep all strings on one line (no literal newlines inside JSON strings, use \\n instead)"""
 
-        completion = client.chat.completions.create(
+        completion = chat_with_fallback(
             messages=[
                 {"role": "system", "content": "You are a CS knowledge base. Always respond with valid JSON only. No markdown. No code fences. Use \\n for newlines inside strings."},
                 {"role": "user", "content": prompt},
@@ -789,7 +793,7 @@ async def run_code(request: RunRequest):
 
     # ── All other languages: Groq AI simulation ──────────────────────────────
     try:
-        completion = client.chat.completions.create(
+        completion = chat_with_fallback(
             messages=[
                 {"role": "system", "content": f"You are a {lang} interpreter/compiler. The user will give you {lang} code. Execute it mentally and output ONLY what the program would print to stdout. If there is a runtime error, show the exact error message. No explanations, no markdown, no code fences — just the raw output."},
                 {"role": "user", "content": f"Run this {lang} code and show the output:\n\n{code}"}
@@ -825,7 +829,7 @@ async def explain_simple(request: ExplainRequest):
         f"Give a short, friendly explanation (3-5 sentences max per bug). Use emojis."
     )
     try:
-        completion = client.chat.completions.create(
+        completion = chat_with_fallback(
             messages=[{"role": "user", "content": prompt}],
             model=OPENAI_MODEL, temperature=0.7, max_tokens=512,
         )
