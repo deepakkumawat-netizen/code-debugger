@@ -1,0 +1,11 @@
+**/node_modules
+**/__pycache__
+**/.venv
+**/venv
+**/.git
+**/dist
+**/.env
+**/.env.*
+*.db
+.idea
+.vscode

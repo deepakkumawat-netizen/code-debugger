@@ -828,7 +828,111 @@ async def run_code(request: RunRequest):
             try: os.unlink(tmp_path)
             except: pass
 
-    # ── All other languages: Groq AI simulation ──────────────────────────────
+    # ── Compile-and-run helper for C / C++ / Rust ────────────────────────────
+    def _compile_and_run(src_suffix: str, compile_cmd_builder, label: str, compile_timeout: int = 10, run_timeout: int = 5):
+        """Write code to a temp file, compile to a binary, run it, return the result dict.
+
+        compile_cmd_builder receives (src_path, bin_path) and returns the argv list
+        for the compiler invocation. Caller is responsible for picking a compiler
+        that's actually on PATH (check with shutil.which first).
+        """
+        src_path = None; bin_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=src_suffix, mode="w", delete=False, encoding="utf-8") as f:
+                f.write(code); src_path = f.name
+            bin_path = src_path.rsplit(".", 1)[0] + ".out"
+            compile_proc = subprocess.run(
+                compile_cmd_builder(src_path, bin_path),
+                capture_output=True, text=True, timeout=compile_timeout
+            )
+            if compile_proc.returncode != 0:
+                return {"output": "", "error": (compile_proc.stderr or compile_proc.stdout)[:2000], "exit_code": compile_proc.returncode, "language": label}
+            run_proc = subprocess.run(
+                [bin_path], capture_output=True, text=True, timeout=run_timeout
+            )
+            return {"output": run_proc.stdout[:5000], "error": run_proc.stderr[:2000], "exit_code": run_proc.returncode, "language": label}
+        except subprocess.TimeoutExpired:
+            return {"output": "", "error": "⏱ Execution timed out", "exit_code": -1, "language": label}
+        except Exception as e:
+            return {"output": "", "error": str(e), "exit_code": -1, "language": label}
+        finally:
+            for p in (src_path, bin_path):
+                if p:
+                    try: os.unlink(p)
+                    except: pass
+
+    # ── C: gcc -o bin file.c && ./bin ────────────────────────────────────────
+    if lang_lower == "c" and shutil.which("gcc"):
+        return _compile_and_run(".c", lambda s, b: ["gcc", "-O0", "-o", b, s], "C")
+
+    # ── C++: g++ -std=c++17 -o bin file.cpp && ./bin ─────────────────────────
+    if lang_lower in ("c++", "cpp") and shutil.which("g++"):
+        return _compile_and_run(".cpp", lambda s, b: ["g++", "-std=c++17", "-O0", "-o", b, s], "C++")
+
+    # ── Rust: rustc -o bin file.rs && ./bin ──────────────────────────────────
+    if lang_lower == "rust" and shutil.which("rustc"):
+        return _compile_and_run(".rs", lambda s, b: ["rustc", "-O", "-o", b, s], "Rust", compile_timeout=20)
+
+    # ── Java: javac → java <ClassName> ───────────────────────────────────────
+    # javac is strict about file name matching the public class name, so we
+    # extract it from the source and write to <ClassName>.java inside a temp
+    # directory. If no public class is present, default to "Main".
+    if lang_lower == "java" and shutil.which("javac") and shutil.which("java"):
+        m = re.search(r"public\s+class\s+(\w+)", code)
+        classname = m.group(1) if m else "Main"
+        tmp_dir = tempfile.mkdtemp(prefix="java_")
+        src_path = os.path.join(tmp_dir, f"{classname}.java")
+        try:
+            with open(src_path, "w", encoding="utf-8") as f:
+                f.write(code)
+            compile_proc = subprocess.run(
+                ["javac", src_path], capture_output=True, text=True, timeout=20, cwd=tmp_dir
+            )
+            if compile_proc.returncode != 0:
+                return {"output": "", "error": (compile_proc.stderr or compile_proc.stdout)[:2000], "exit_code": compile_proc.returncode, "language": "Java"}
+            run_proc = subprocess.run(
+                ["java", classname], capture_output=True, text=True, timeout=10, cwd=tmp_dir
+            )
+            return {"output": run_proc.stdout[:5000], "error": run_proc.stderr[:2000], "exit_code": run_proc.returncode, "language": "Java"}
+        except subprocess.TimeoutExpired:
+            return {"output": "", "error": "⏱ Execution timed out", "exit_code": -1, "language": "Java"}
+        except Exception as e:
+            return {"output": "", "error": str(e), "exit_code": -1, "language": "Java"}
+        finally:
+            try: shutil.rmtree(tmp_dir)
+            except: pass
+
+    # ── Ruby: ruby file.rb ───────────────────────────────────────────────────
+    if lang_lower == "ruby" and shutil.which("ruby"):
+        with tempfile.NamedTemporaryFile(suffix=".rb", mode="w", delete=False, encoding="utf-8") as f:
+            f.write(code); tmp_path = f.name
+        try:
+            proc = subprocess.run(["ruby", tmp_path], capture_output=True, text=True, timeout=10)
+            return {"output": proc.stdout[:5000], "error": proc.stderr[:2000], "exit_code": proc.returncode, "language": "Ruby"}
+        except subprocess.TimeoutExpired:
+            return {"output": "", "error": "⏱ Execution timed out", "exit_code": -1, "language": "Ruby"}
+        except Exception as e:
+            return {"output": "", "error": str(e), "exit_code": -1, "language": "Ruby"}
+        finally:
+            try: os.unlink(tmp_path)
+            except: pass
+
+    # ── PHP: php file.php ────────────────────────────────────────────────────
+    if lang_lower == "php" and shutil.which("php"):
+        with tempfile.NamedTemporaryFile(suffix=".php", mode="w", delete=False, encoding="utf-8") as f:
+            f.write(code); tmp_path = f.name
+        try:
+            proc = subprocess.run(["php", tmp_path], capture_output=True, text=True, timeout=10)
+            return {"output": proc.stdout[:5000], "error": proc.stderr[:2000], "exit_code": proc.returncode, "language": "PHP"}
+        except subprocess.TimeoutExpired:
+            return {"output": "", "error": "⏱ Execution timed out", "exit_code": -1, "language": "PHP"}
+        except Exception as e:
+            return {"output": "", "error": str(e), "exit_code": -1, "language": "PHP"}
+        finally:
+            try: os.unlink(tmp_path)
+            except: pass
+
+    # ── Any language still unhandled: AI-simulated output via Claude/Groq ────
     try:
         completion = chat_with_fallback(
             messages=[
