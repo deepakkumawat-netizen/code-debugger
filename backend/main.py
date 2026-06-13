@@ -728,8 +728,21 @@ def detect_language_from_code(code: str) -> str:
     if "fn main()" in s and "println!" in s:
         return "Rust"
 
-    # JavaScript / Node.js
-    if "console.log(" in s or ("require(" in s and "import" not in s):
+    # JavaScript / Node.js — broad set of markers so we never dump JS into
+    # the Python interpreter. We've already eliminated Java/C/C++/Rust/Go above,
+    # so 'let'/'const' are safe JS signals at this point.
+    if (
+        "console.log(" in s
+        or "console.error(" in s
+        or ("require(" in s and "import" not in s)
+        or re.search(r"\bfunction\s+\w+\s*\(", s)            # function name(
+        or re.search(r"\bfunction\s*\(", s)                  # anonymous function(
+        or re.search(r"\b(let|const|var)\s+\w+\s*=", s)      # let/const/var x =
+        or re.search(r"=>\s*[\{\(]", s)                      # arrow fn
+        or re.search(r"\bdocument\.\w+", s)                  # document.X
+        or re.search(r"\bwindow\.\w+", s)                    # window.X
+        or "module.exports" in s
+    ):
         return "JavaScript"
 
     # TypeScript
