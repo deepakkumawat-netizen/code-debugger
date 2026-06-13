@@ -1017,7 +1017,7 @@ ${outputSection}
                 <div style={{ marginTop: 10, borderRadius: 8, overflow: "hidden", border: "1.5px solid var(--border)" }}>
                   <div style={{ background: runOutput.exit_code === 0 ? "#064e3b" : "#7f1d1d",
                     padding: "6px 12px", fontSize: 12, fontWeight: 700, color: "white", display: "flex", justifyContent: "space-between" }}>
-                    <span>{runOutput.exit_code === 0 ? "✅ Output" : "❌ Error"} — {runOutput.language || "Python"}{runOutput.simulated ? " (AI Simulated)" : ""}</span>
+                    <span>{runOutput.exit_code === 0 ? "✅ Output" : "❌ Error"}{runOutput.language ? ` — ${runOutput.language}` : ""}{runOutput.simulated ? " (AI Simulated)" : ""}</span>
                     <button onClick={() => setRunOutput(null)} style={{ background: "none", border: "none", color: "white", cursor: "pointer", fontSize: 14 }}>✕</button>
                   </div>
                   <pre style={{ margin: 0, padding: "10px 14px", fontSize: 12.5, lineHeight: 1.6,
